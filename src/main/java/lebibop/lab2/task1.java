@@ -11,7 +11,8 @@ public class task1 {
         int ai = rank + 1;
         int bi = (rank + 1) * 2;
 
-        System.out.println("Process " + rank + " -> ai: " + ai + ", bi: " + bi);
+        System.out.println("Process " + rank + " ID: " + Thread.currentThread().getId()
+                + " -> ai: " + ai + ", bi: " + bi);
 
         int[] received_a = new int[1];
         int[] received_b = new int[1];
@@ -60,7 +61,7 @@ public class task1 {
             MPI.COMM_WORLD.Send(new int[]{bi}, 0, 1, MPI.INT, send_b_to, 99);
         }
 
-        System.out.println("Process " + rank
+        System.out.println("Process " + rank  + " ID: " + Thread.currentThread().getId()
                 + " received: a=" + received_a[0]
                 + ", b=" + received_b[0]
                 + " -> c" + rank + " = " + (received_a[0] + received_b[0]));

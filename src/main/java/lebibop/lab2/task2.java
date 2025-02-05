@@ -14,7 +14,8 @@ public class task2 {
         int range = end - start + 1;
 
         if (rank >= range) {
-            System.out.println("Process " + rank + " is idle (no range assigned).");
+            System.out.println("Process " + rank + " ID: " + Thread.currentThread().getId()
+                    + " is idle (no range assigned).");
         } else {
             int localRange = range / size;
             int remainder = range % size;
@@ -40,7 +41,11 @@ public class task2 {
                 localSum += i;
             }
 
-            System.out.println("Process " + rank + ": start-" + localStart + " end-" + localEnd + " sum-" + localSum);
+            System.out.println("Process " + rank + " ID: " + Thread.currentThread().getId()
+                    + ": start-" + localStart
+                    + " end-" + localEnd
+                    + " sum-" + localSum
+            );
 
             if (rank != 0) {
                 MPI.COMM_WORLD.Send(new int[]{localSum}, 0, 1, MPI.INT, 0, 0);

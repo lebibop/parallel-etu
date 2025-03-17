@@ -14,38 +14,54 @@ public class task2 {
         int range = end - start + 1;
 
         if (rank >= range) {
-            System.out.println("Process " + rank + " ID: " + Thread.currentThread().getId()
-                    + " is idle (no range assigned).");
+            System.out.printf("Process %2d (ID: %3d) is idle (no range assigned).%n",
+                    rank, Thread.currentThread().getId());
         } else {
-            int localRange = range / size;
-            int remainder = range % size;
+            int[] localRange = new int[2];
 
-            int localStart, localEnd;
+            if (rank == 0) {
+                int localRangeSize = range / size;
+                int remainder = range % size;
 
-            if (rank < remainder) {
-                localStart = start + rank * (localRange + 1);
-                localEnd = localStart + localRange;
+                for (int i = 0; i < size; i++) {
+                    if (i >= range) {
+                        continue;
+                    }
+
+                    int localStart, localEnd;
+
+                    if (i < remainder) {
+                        localStart = start + i * (localRangeSize + 1);
+                        localEnd = localStart + localRangeSize;
+                    } else {
+                        localStart = start + (i * localRangeSize) + remainder;
+                        localEnd = localStart + localRangeSize - 1;
+                    }
+
+                    if (i == 0) {
+                        localRange[0] = localStart;
+                        localRange[1] = localEnd;
+                    } else {
+                        MPI.COMM_WORLD.Send(new int[]{localStart, localEnd}, 0, 2, MPI.INT, i, 0);
+                    }
+                }
             } else {
-                localStart = start + (rank * localRange) + remainder;
-                localEnd = localStart + localRange - 1;
+                MPI.COMM_WORLD.Recv(localRange, 0, 2, MPI.INT, 0, 0);
             }
 
-            if (localStart > localEnd) {
-                int temp = localStart;
-                localStart = localEnd;
-                localEnd = temp;
+            if (localRange[0] > localRange[1]) {
+                int temp = localRange[0];
+                localRange[0] = localRange[1];
+                localRange[1] = temp;
             }
 
             int localSum = 0;
-            for (int i = localStart; i <= localEnd; i++) {
+            for (int i = localRange[0]; i <= localRange[1]; i++) {
                 localSum += i;
             }
 
-            System.out.println("Process " + rank + " ID: " + Thread.currentThread().getId()
-                    + ": start-" + localStart
-                    + " end-" + localEnd
-                    + " sum-" + localSum
-            );
+            System.out.printf("Process %2d (ID: %3d): start=%4d, end=%4d, sum=%d%n",
+                    rank, Thread.currentThread().getId(), localRange[0], localRange[1], localSum);
 
             if (rank != 0) {
                 MPI.COMM_WORLD.Send(new int[]{localSum}, 0, 1, MPI.INT, 0, 0);
@@ -68,7 +84,7 @@ public class task2 {
                     globalSum += allSums[i];
                 }
 
-                System.out.println("Total sum: " + globalSum);
+                System.out.printf("Total sum: %d", globalSum);
             }
         }
 

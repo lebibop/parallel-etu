@@ -1,11 +1,12 @@
 package lebibop.lab4;
 
 import mpi.MPI;
+import mpi.MPIException;
 
 import java.util.Random;
 
 public class Task2 {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws MPIException {
         MPI.Init(args);
 
         int rank = MPI.COMM_WORLD.Rank();
@@ -19,6 +20,7 @@ public class Task2 {
         }
 
         int[][] matrix = new int[rows][cols];
+        int[] flatMatrix = new int[rows * cols];
 
         if (rank == 0) {
             Random rand = new Random();
@@ -29,40 +31,56 @@ public class Task2 {
             }
             System.out.println("Matrix:");
             printMatrix(matrix);
+
+            for (int i = 0; i < rows; i++) {
+                System.arraycopy(matrix[i], 0, flatMatrix, i * cols, cols);
+            }
         }
 
-        for (int i = 0; i < rows; i++) {
-            MPI.COMM_WORLD.Bcast(matrix[i], 0, cols, MPI.INT, 0);
+        int baseRows = rows / size;
+        int extra = rows % size;
+        int[] sendCounts = new int[size];
+        int[] displs = new int[size];
+        int offset = 0;
+        for (int i = 0; i < size; i++) {
+            int myRows = baseRows + (i < extra ? 1 : 0);
+            sendCounts[i] = myRows * cols;
+            displs[i] = offset;
+            offset += sendCounts[i];
         }
+
+        int recvCount = sendCounts[rank];
+        int recvRows = recvCount / cols;
+        int[] recvBuffer = new int[recvCount];
+
+        MPI.COMM_WORLD.Scatterv(flatMatrix, 0, sendCounts, displs, MPI.INT, recvBuffer, 0, recvCount, MPI.INT, 0);
 
         int[] lastElementBuffer = new int[1];
-
         if (rank == 0) {
             lastElementBuffer[0] = matrix[rows - 1][cols - 1];
         }
-
         MPI.COMM_WORLD.Bcast(lastElementBuffer, 0, 1, MPI.INT, 0);
-
         int lastElement = lastElementBuffer[0];
 
         double localSum = 0;
         int localCount = 0;
+        int globalRowStart = displs[rank] / cols;
 
-        for (int i = rank; i < rows; i += size) {
+        for (int i = 0; i < recvRows; i++) {
             for (int j = 0; j < cols; j++) {
-                int deviation = matrix[i][j] - lastElement;
+                int value = recvBuffer[i * cols + j];
+                int deviation = value - lastElement;
                 if (deviation > 0) {
                     localSum += deviation;
                     localCount++;
-                    System.out.printf("Process %2d (ID: %3d): row=%2d, col=%2d -> %2d - %2d = %2d%n",
-                            rank, Thread.currentThread().getId(), i, j, matrix[i][j], lastElement, deviation);
+                    System.out.printf("Process %2d (Thread ID: %3d): row=%2d, col=%2d -> %2d - %2d = %2d%n",
+                            rank, Thread.currentThread().getId(), globalRowStart + i, j, value, lastElement, deviation);
                 }
             }
         }
 
         double[] globalSum = new double[1];
         int[] globalCount = new int[1];
-
         MPI.COMM_WORLD.Reduce(new double[]{localSum}, 0, globalSum, 0, 1, MPI.DOUBLE, MPI.SUM, 0);
         MPI.COMM_WORLD.Reduce(new int[]{localCount}, 0, globalCount, 0, 1, MPI.INT, MPI.SUM, 0);
 

@@ -15,11 +15,10 @@ public class Lab3 {
         int rows = Integer.parseInt(System.getProperty("row", "10"));
         int cols = Integer.parseInt(System.getProperty("col", "11"));
 
-        if (rows == cols) {
-            cols++;
-        }
+        if (rows == cols) cols++;
 
         int[][] matrix = new int[rows][cols];
+        int[] flatMatrix = new int[rows * cols];
 
         if (rank == 0) {
             Random rand = new Random();
@@ -30,58 +29,61 @@ public class Lab3 {
             }
             System.out.println("Initial matrix:");
             printMatrix(matrix);
+
+            for (int i = 0; i < rows; i++) {
+                System.arraycopy(matrix[i], 0, flatMatrix, i * cols, cols);
+            }
         }
 
-        for (int i = 0; i < rows; i++) {
-            int responsibleProcess = i % size;
-            int[] rowBuffer = new int[cols];
+        int baseRows = rows / size;
+        int extra = rows % size;
+        int[] sendCounts = new int[size];
+        int[] displs = new int[size];
+        int offset = 0;
+        for (int i = 0; i < size; i++) {
+            int myRows = baseRows + (i < extra ? 1 : 0);
+            sendCounts[i] = myRows * cols;
+            displs[i] = offset;
+            offset += sendCounts[i];
+        }
 
-            if (rank == 0) {
-                System.arraycopy(matrix[i], 0, rowBuffer, 0, cols);
-                if (responsibleProcess != 0) {
-                    MPI.COMM_WORLD.Send(rowBuffer, 0, cols, MPI.INT, responsibleProcess, i);
-                }
+        int recvCount = sendCounts[rank];
+        int recvRows = recvCount / cols;
+        int[] recvBuffer = new int[recvCount];
+
+        MPI.COMM_WORLD.Scatterv(flatMatrix, 0, sendCounts, displs, MPI.INT, recvBuffer, 0, recvCount, MPI.INT, 0);
+
+        if (recvRows > 0) {
+            int firstRow = displs[rank] / cols;
+            int lastRow = firstRow + recvRows - 1;
+            System.out.printf("Process %d received rows %d to %d%n", rank, firstRow, lastRow);
+        } else {
+            System.out.printf("Process %d received no rows%n", rank);
+        }
+
+        for (int i = 0; i < recvBuffer.length; i++) {
+            recvBuffer[i] = makeDivisibleBy2And3(recvBuffer[i]);
+        }
+
+        MPI.COMM_WORLD.Gatherv(recvBuffer, 0, recvCount, MPI.INT, flatMatrix, 0, sendCounts, displs, MPI.INT, 0);
+
+        if (rank == 0) {
+            for (int i = 0; i < rows; i++) {
+                System.arraycopy(flatMatrix, i * cols, matrix[i], 0, cols);
             }
-
-            if (rank == responsibleProcess) {
-                if (rank != 0) {
-                    MPI.COMM_WORLD.Recv(rowBuffer, 0, cols, MPI.INT, 0, i);
-                }
-                System.out.printf("Process %2d (ID: %3d) is modifying row - %2d%n",
-                        rank, Thread.currentThread().getId(), i);
-                modifyRow(rowBuffer);
-
-                if (rank != 0) {
-                    MPI.COMM_WORLD.Send(rowBuffer, 0, cols, MPI.INT, 0, i);
-                }
-            }
-
-            if (rank == 0 && responsibleProcess != 0) {
-                MPI.COMM_WORLD.Recv(rowBuffer, 0, cols, MPI.INT, responsibleProcess, i);
-            }
-
-            if (rank == 0) {
-                System.arraycopy(rowBuffer, 0, matrix[i], 0, cols);
-            }
+            System.out.println("Modified matrix:");
+            printMatrix(matrix);
         }
 
         for (int i = 0; i < rows; i++) {
             MPI.COMM_WORLD.Bcast(matrix[i], 0, cols, MPI.INT, 0);
         }
 
-        if (rank == 0) {
-            System.out.println("Modified matrix:");
-            printMatrix(matrix);
-        }
-
         int[] lastElementBuffer = new int[1];
-
         if (rank == 0) {
             lastElementBuffer[0] = matrix[rows - 1][cols - 1];
         }
-
         MPI.COMM_WORLD.Bcast(lastElementBuffer, 0, 1, MPI.INT, 0);
-
         int lastElement = lastElementBuffer[0];
 
         double localSum = 0;
@@ -113,12 +115,6 @@ public class Lab3 {
         }
 
         MPI.Finalize();
-    }
-
-    private static void modifyRow(int[] row) {
-        for (int i = 0; i < row.length; i++) {
-            row[i] = makeDivisibleBy2And3(row[i]);
-        }
     }
 
     private static int makeDivisibleBy2And3(int num) {

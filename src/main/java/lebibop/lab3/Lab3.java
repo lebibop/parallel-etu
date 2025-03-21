@@ -14,7 +14,6 @@ public class Lab3 {
 
         int rows = Integer.parseInt(System.getProperty("row", "10"));
         int cols = Integer.parseInt(System.getProperty("col", "11"));
-
         if (rows == cols) cols++;
 
         int[][] matrix = new int[rows][cols];
@@ -51,7 +50,8 @@ public class Lab3 {
         int recvRows = recvCount / cols;
         int[] recvBuffer = new int[recvCount];
 
-        MPI.COMM_WORLD.Scatterv(flatMatrix, 0, sendCounts, displs, MPI.INT, recvBuffer, 0, recvCount, MPI.INT, 0);
+        MPI.COMM_WORLD.Scatterv(flatMatrix, 0, sendCounts, displs, MPI.INT,
+                recvBuffer, 0, recvCount, MPI.INT, 0);
 
         if (recvRows > 0) {
             int firstRow = displs[rank] / cols;
@@ -65,7 +65,8 @@ public class Lab3 {
             recvBuffer[i] = makeDivisibleBy2And3(recvBuffer[i]);
         }
 
-        MPI.COMM_WORLD.Gatherv(recvBuffer, 0, recvCount, MPI.INT, flatMatrix, 0, sendCounts, displs, MPI.INT, 0);
+        MPI.COMM_WORLD.Gatherv(recvBuffer, 0, recvCount, MPI.INT,
+                flatMatrix, 0, sendCounts, displs, MPI.INT, 0);
 
         if (rank == 0) {
             for (int i = 0; i < rows; i++) {
@@ -73,10 +74,6 @@ public class Lab3 {
             }
             System.out.println("Modified matrix:");
             printMatrix(matrix);
-        }
-
-        for (int i = 0; i < rows; i++) {
-            MPI.COMM_WORLD.Bcast(matrix[i], 0, cols, MPI.INT, 0);
         }
 
         int[] lastElementBuffer = new int[1];
@@ -88,22 +85,23 @@ public class Lab3 {
 
         double localSum = 0;
         int localCount = 0;
+        int globalRowStart = displs[rank] / cols;
 
-        for (int i = rank; i < rows; i += size) {
+        for (int i = 0; i < recvRows; i++) {
             for (int j = 0; j < cols; j++) {
-                int deviation = matrix[i][j] - lastElement;
+                int value = recvBuffer[i * cols + j];
+                int deviation = value - lastElement;
                 if (deviation > 0) {
                     localSum += deviation;
                     localCount++;
-                    System.out.printf("Process %2d (ID: %3d): row=%2d, col=%2d -> %2d - %2d = %2d%n",
-                            rank, Thread.currentThread().getId(), i, j, matrix[i][j], lastElement, deviation);
+                    System.out.printf("Process %2d (Thread ID: %3d): row=%2d, col=%2d -> %2d - %2d = %2d%n",
+                            rank, Thread.currentThread().getId(), globalRowStart + i, j, value, lastElement, deviation);
                 }
             }
         }
 
         double[] globalSum = new double[1];
         int[] globalCount = new int[1];
-
         MPI.COMM_WORLD.Reduce(new double[]{localSum}, 0, globalSum, 0, 1, MPI.DOUBLE, MPI.SUM, 0);
         MPI.COMM_WORLD.Reduce(new int[]{localCount}, 0, globalCount, 0, 1, MPI.INT, MPI.SUM, 0);
 
